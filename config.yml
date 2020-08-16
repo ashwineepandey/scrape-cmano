@@ -1,0 +1,5 @@
+output_dir: scrape_cmano
+project_name: Scrape CMANO
+repo_name: scrape-cmano
+python_package: scraper
+include_example: false
