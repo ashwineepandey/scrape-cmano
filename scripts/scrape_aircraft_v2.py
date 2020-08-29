@@ -11,21 +11,29 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 def _get_response(url):
-    response = requests.get(url)
+    try:
+        response = requests.get(url)
+    except error as e:
+        logging.error(f"Unable to get response from URL: {url}. \n {e}")
     return response
 
 
 def get_soup_object(url):
     response = _get_response(url)
-    #Insert logic to check
-    #if response = 200
-    soup = BeautifulSoup(response.text, "html.parser")
-    #else handle exceptions
+    try:
+        soup = BeautifulSoup(response.text, "html.parser")
+    except error as e:
+        logging.error(f"Unable to get response from URL: {url}. \n {e}")
+
     return soup
 
 
 def get_aircraft_urls(url, aircraft_url_input_dir):
-    df_aircraft_urls = pd.read_table(aircraft_url_input_dir)
+    try:
+        df_aircraft_urls = pd.read_table(aircraft_url_input_dir)
+    except FileNotFoundError as e:
+        logging.error(f"{e}. Ensure filename is correct and file is stored in correct directory.")
+
     aircraft_url_list = []
     for index in range(len(df_aircraft_urls)):
         url_suffix_aircraft = df_aircraft_urls['URL'][index]
@@ -262,52 +270,68 @@ def main():
     logging.info(f'Beginning Process.')
     
     df_aircraft_urls, aircraft_url_list = get_aircraft_urls(root_url, aircraft_url_input_dir)
-    
-    aircraft_url_list = aircraft_url_list[:100]
+
+    #TODO: Remove line below in final version:
+    aircraft_url_list = aircraft_url_list[:500]
     
     aircraft_data = pd.DataFrame()
     
     for index in range(len(aircraft_url_list)):
-        
+
+        if (index+1) % 100 == 0:
+
+            time.sleep(3)
+
         url = aircraft_url_list[index]
-        
-        logging.debug(f'Current URL being processed is: {url} at index: {index}.')
+
+        logging.info(f'Current URL being processed is: {url} at index: {index}.')
         soup = get_soup_object(url)
-        
+
         number_of_tables, table_header_dict = count_tables_on_page(soup)
-        
+
         df_to_combine = []
-        
-        for table_number in range(number_of_tables):
-            
-            logging.debug(f"table_number is {table_number}")
-            logging.debug(f"table_header_dict is {table_header_dict}")
-            
-            _index = table_header_dict['index'][table_number]
-            _header = table_header_dict['header'][table_number][0]
-            
-            logging.debug(f"_index is {_index}")
-            logging.debug(f"_header is {_header}")
-            
-            if _header == "General data:":
-                #Insert logic here to catch exceptions
-                df_table_1 = read_table_one(soup, table_number)
-                logging.debug(f'Table 1 returned successfully.')
-                df_to_combine.append(df_table_1)
-            elif _header == "Sensors / EW:":
-                #Insert logic here to catch exceptions
-                df_table_2 = read_table_two(soup, table_number)
-                logging.debug(f'Table 2 returned successfully.')
-                df_to_combine.append(df_table_2)
-            elif _header == "Weapons / Loadouts:":
-                #Insert logic here to catch exceptions
-                df_table_3 = read_table_three(soup, table_number)
-                logging.debug(f'Table 3 returned successfully.')
-                df_to_combine.append(df_table_3)
+
+        if 4 > number_of_tables > 0:
+
+            for table_number in range(number_of_tables):
+
+                logging.debug(f"table_number is {table_number}")
+                logging.debug(f"table_header_dict is {table_header_dict}")
+
+                _index = table_header_dict['index'][table_number]
+                _header = table_header_dict['header'][table_number][0]
+
+                logging.debug(f"_index is {_index}")
+                logging.debug(f"_header is {_header}")
+
+                if _header == "General data:":
+                    #Insert logic here to catch exceptions
+                    df_table_1 = read_table_one(soup, table_number)
+                    logging.debug(f'Table 1 returned successfully.')
+                    df_to_combine.append(df_table_1)
+                elif _header == "Sensors / EW:":
+                    #Insert logic here to catch exceptions
+                    df_table_2 = read_table_two(soup, table_number)
+                    logging.debug(f'Table 2 returned successfully.')
+                    df_to_combine.append(df_table_2)
+                elif _header == "Weapons / Loadouts:":
+                    #Insert logic here to catch exceptions
+                    df_table_3 = read_table_three(soup, table_number)
+                    logging.debug(f'Table 3 returned successfully.')
+                    df_to_combine.append(df_table_3)
             _aircraft_data = combine_tables_into_dataframe(df_to_combine)
-            logging.debug(f'Table 1, 2 and 3 combined successfully.')       
-        aircraft_data = pd.concat([aircraft_data, _aircraft_data])
-        logging.debug(f'Row {index} appended to dataframe.')
+            logging.debug(f'Table 1, 2 and 3 combined successfully.')
+        else:
+            logging.error(f"For this aircraft: {url}, the number of tables found is: {number_of_tables}")
+
+        try:
+            _aircraft_data = combine_tables_into_dataframe(df_to_combine)
+            logging.debug(f'Table 1, 2 and 3 combined successfully.')
+
+            aircraft_data = pd.concat([aircraft_data, _aircraft_data])
+            logging.debug(f'Row {index} appended to dataframe.')
+        except error as e:
+            logging.error(f"Aircraft {url} at index {index} was not added to data.")
   
     write_dataframe_to_file(aircraft_data, csv_output_dir, csv_output_filename)
 
